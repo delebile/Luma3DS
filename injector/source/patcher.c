@@ -594,8 +594,10 @@ void patchCode(u64 progId, u16 progVer, u8 *code, u32 size)
         }
     }
 
+    patchRomfsRedirection(progId, code, size);
+    
     return;
-
+	
 error:
     svcBreak(USERBREAK_ASSERT);
     while(true);
