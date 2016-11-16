@@ -153,25 +153,26 @@ void patchFsRedirection(u64 progId, u8* code, u32 size, u8 romfs, u8 save)
 	/* Redirect SaveData file access to an sdcard folder */
 	if(save && fsControlArchive && fsMountSave && iFileOpen)
 	{
-		/* Redirect SaveData is only for game apps */
-		if((u32)((progId & 0xFFFFFFF000000000LL) >> 0x24) != 0x0004000) return;
-
-		/* Create the title folder */
-		path[34] = 0;
-		FS_Archive sdmcArchive = (FS_Archive){0x00000009, (FS_Path){PATH_EMPTY, 1, (u8*)""}, 0};
-		FSLDR_OpenArchive(&sdmcArchive);
-		FSLDR_CreateDirectory(sdmcArchive, (FS_Path){PATH_ASCII, 6, (u8*)"/luma"}, 0);
-		FSLDR_CreateDirectory(sdmcArchive, (FS_Path){PATH_ASCII, 13, (u8*)"/luma/titles"}, 0);
-		FSLDR_CreateDirectory(sdmcArchive, (FS_Path){PATH_ASCII, sizeof(path) - 11, (u8*)path + 5}, 0);
-
-		/* Substitute archiveId 4 (SaveData) to 9 (SDMC), to mount the save on sdcard */
-		*((u32*)(code + fsMountSave + 0x1C)) = (*((u32*)(code + fsMountSave + 0x1C)) & ~0xf) | 0x9;
-
-		/* Hook iFileOpen to redirect the save-file path to an sd directory */
-		*((u32*)(code + iFileOpen)) = BRANCH(iFileOpen, saveRedirFunction);
-
-		/* Patch fsControlArchive to never return errors */
-		while((*((u32*)(code + fsControlArchive)) & 0xffff0000) != 0xe8bd0000) fsControlArchive += 4;
-		*((u32*)(code + fsControlArchive - 4)) = 0xe3a00000;  // mov r0, #0
+        /* Redirect SaveData is only for game apps */
+        if((u32)((progId & 0xFFFFFFF000000000LL) >> 0x24) != 0x0004000) return;
+        
+        /* Create the title folder */
+        path[34] = 0;
+        FS_Archive sdmcArchive = (FS_Archive){0x00000009, (FS_Path){PATH_EMPTY, 1, (u8*)""}, 0};
+        FSLDR_OpenArchive(&sdmcArchive);
+        FSLDR_CreateDirectory(sdmcArchive, (FS_Path){PATH_ASCII, 6, (u8*)"/luma"}, 0);
+        FSLDR_CreateDirectory(sdmcArchive, (FS_Path){PATH_ASCII, 13, (u8*)"/luma/titles"}, 0);
+        FSLDR_CreateDirectory(sdmcArchive, (FS_Path){PATH_ASCII, sizeof(path) - 11, (u8*)path + 5}, 0);
+        
+        /* Substitute archiveId 4 (SaveData) to 9 (SDMC), to mount the save on sdcard */
+        while(*((u32*)(code + fsMountSave)) != 0xe3a01004) fsMountSave += 4;
+        *((u32*)(code + fsMountSave)) = 0xe3a01009;  // mov r1, #9
+        
+        /* Hook iFileOpen to redirect the save-file path to an sd directory */
+        *((u32*)(code + iFileOpen)) = BRANCH(iFileOpen, saveRedirFunction);
+        
+        /* Patch fsControlArchive to never return errors */
+        while((*((u32*)(code + fsControlArchive)) & 0xffff0000) != 0xe8bd0000) fsControlArchive += 4;
+        *((u32*)(code + fsControlArchive - 4)) = 0xe3a00000;  // mov r0, #0
 	}
 }
