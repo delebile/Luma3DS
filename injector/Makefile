@@ -16,27 +16,31 @@ name := $(shell basename $(CURDIR))
 dir_source := source
 dir_build := build
 dir_out := ../$(dir_build)
+dir_data := patch
+patches := $(patsubst %.s,%,$(notdir $(call rwildcard, $(dir_data), *.s)))
 
 LIBS := -lctru
 LIBDIRS	:= $(CTRULIB)
-LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
+LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib/)
 
-INCLUDE	:= $(foreach dir,$(LIBDIRS),-I$(dir)/include)
+INCLUDE	:= $(foreach dir,$(LIBDIRS),-I$(dir)/include) -I$(dir_build)
 
 ASFLAGS := -mcpu=mpcore -mfloat-abi=hard -mtp=soft
 CFLAGS := -Wall -Wextra -MMD -MP -marm $(ASFLAGS) -fno-builtin -std=c11 -O2 -flto -ffast-math -mword-relocations \
 	  -ffunction-sections -fdata-sections $(INCLUDE) -DARM11 -D_3DS
 LDFLAGS := -Xlinker --defsym="__start__=0x14000000" -specs=3dsx.specs $(ASFLAGS)
 
-objects = $(patsubst $(dir_source)/%.c, $(dir_build)/%.o, \
-          $(call rwildcard, $(dir_source), *.s *.c))
+objects = $(foreach f,$(patches), $(dir_build)/$(f).bin.o) \
+          $(patsubst $(dir_source)/%.c, $(dir_build)/%.o, \
+          $(call rwildcard, $(dir_source), *.s *.c)) 
 
+		  
 .PHONY: all
 all: $(dir_out)/$(name).bin
 
 .PHONY: clean
 clean:
-	@rm -rf $(dir_build)
+	@rm -rf $(dir_build) $(dir_out)/$(name).bin
 
 $(dir_out)/$(name).bin: $(dir_build)/$(name).elf
 	@makerom -f ncch -rsf loader.rsf -nocodepadding -o $@ -elf $<
@@ -53,4 +57,15 @@ $(dir_build)/%.o: $(dir_source)/%.c
 $(dir_build)/%.o: $(dir_source)/%.s
 	@mkdir -p "$(@D)"
 	$(COMPILE.s) $(OUTPUT_OPTION) $<
+
+$(dir_build)/%.bin.o : $(dir_data)/%.bin
+	@mkdir -p "$(@D)"
+	@echo $(notdir $<)
+	@$(bin2o)
+	@mv $(patsubst %.bin,%_bin.h,$(notdir $<)) $(dir_build)/$(patsubst %.bin,%_bin.h,$(notdir $<))
+
+$(dir_data)/%.bin : $(dir_data)/%.s
+	@echo $(notdir $<)
+	@cd $(dir_data) && armips $(notdir $<)
+
 include $(call rwildcard, $(dir_build), *.d)

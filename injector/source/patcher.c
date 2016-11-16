@@ -4,6 +4,7 @@
 #include "strings.h"
 #include "ifile.h"
 #include "CFWInfo.h"
+#include "fspatch.h"
 
 static CFWInfo info;
 
@@ -38,7 +39,7 @@ static Result fileOpen(IFile *file, FS_ArchiveID archiveId, const char *path, in
     return IFile_Open(file, archiveId, archivePath, filePath, flags);
 }
 
-static Result openLumaFile(IFile *file, const char *path)
+Result openLumaFile(IFile *file, const char *path)
 {
     Result res = fileOpen(file, ARCHIVE_SDMC, path, FS_OPEN_READ);
 
@@ -594,7 +595,7 @@ void patchCode(u64 progId, u16 progVer, u8 *code, u32 size)
         }
     }
 
-    patchRomfsRedirection(progId, code, size);
+    patchFsRedirection(progId, code, size, 1, 1);
     
     return;
 	

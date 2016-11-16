@@ -107,3 +107,44 @@ Result FSLDR_OpenFileDirectly(Handle* out, FS_ArchiveID archiveId, FS_Path archi
 
   return cmdbuf[1];
 }
+
+Result FSLDR_CreateDirectory(FS_Archive archive, FS_Path path, u32 attributes)
+{
+  u32 *cmdbuf = getThreadCommandBuffer();
+
+  cmdbuf[0] = IPC_MakeHeader(0x809,6,2); // 0x8090182
+  cmdbuf[1] = 0;
+  cmdbuf[2] = (u32) archive.handle;
+  cmdbuf[3] = (u32) (archive.handle >> 32);
+  cmdbuf[4] = path.type;
+  cmdbuf[5] = path.size;
+  cmdbuf[6] = attributes;
+  cmdbuf[7] = IPC_Desc_StaticBuffer(path.size, 0);
+  cmdbuf[8] = (u32) path.data;
+
+  Result ret = 0;
+  if(R_FAILED(ret = svcSendSyncRequest(fsldrHandle))) return ret;
+
+  return cmdbuf[1];
+}
+
+Result FSLDR_OpenArchive(FS_Archive* archive)
+{
+  if(!archive) return -2;
+
+  u32 *cmdbuf = getThreadCommandBuffer();
+
+  cmdbuf[0] = IPC_MakeHeader(0x80C,3,2); // 0x80C00C2
+  cmdbuf[1] = archive->id;
+  cmdbuf[2] = archive->lowPath.type;
+  cmdbuf[3] = archive->lowPath.size;
+  cmdbuf[4] = IPC_Desc_StaticBuffer(archive->lowPath.size, 0);
+  cmdbuf[5] = (u32) archive->lowPath.data;
+
+  Result ret = 0;
+  if(R_FAILED(ret = svcSendSyncRequest(fsldrHandle))) return ret;
+
+  archive->handle = cmdbuf[2] | ((u64) cmdbuf[3] << 32);
+
+  return cmdbuf[1];
+}
