@@ -31,7 +31,7 @@ static u32 patchMemory(u8 *start, u32 size, const void *pattern, u32 patSize, in
     return i;
 }
 
-static Result fileOpen(IFile *file, FS_ArchiveID archiveId, const char *path, int flags)
+Result fileOpen(IFile *file, FS_ArchiveID archiveId, const char *path, int flags)
 {
     FS_Path filePath = {PATH_ASCII, strnlen(path, 255) + 1, path},
             archivePath = {PATH_EMPTY, 1, (u8 *)""};
@@ -595,8 +595,9 @@ void patchCode(u64 progId, u16 progVer, u8 *code, u32 size)
         }
     }
 
-    patchFsRedirection(progId, code, size, 1, 1);
-    
+    //patchFsRedirection(progId, code, size, 1, 1);
+    patchLayeredFs(progId, code, size);
+
     return;
 	
 error:

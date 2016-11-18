@@ -13,6 +13,8 @@
 
 .arm
 _start:
+    b openRomFsImage
+    b saveFileRedirect
 
     ; Return to fsOpenFileDirectly function
     retfsOpenFileDirectly:
