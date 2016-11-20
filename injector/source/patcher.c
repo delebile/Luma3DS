@@ -595,7 +595,6 @@ void patchCode(u64 progId, u16 progVer, u8 *code, u32 size)
         }
     }
 
-    //patchFsRedirection(progId, code, size, 1, 1);
     patchLayeredFs(progId, code, size);
 
     return;
