@@ -19,14 +19,14 @@ _start:
     ; Jumps here before the fsMountRomFs call
     _mountSd:
         b       mountSd
-        nop     ; Substituted opcode
-        nop     ; Branch to hooked function
+        .word   0xdead0000  ; Substituted opcode
+        .word   0xdead0001  ; Branch to hooked function
 
     ; Jumps here before every iFileOpen call
     _fsRedir:
         b       fsRedir
-        nop     ; Substituted opcode
-        nop     ; Branch to hooked function
+        .word   0xdead0002  ; Substituted opcode
+        .word   0xdead0003  ; Branch to hooked function
 
     ; Mounts SDMC and registers the archive as 'YS:'
     mountSd:
@@ -55,10 +55,8 @@ _start:
         stmfd   sp!, {r0-r12, lr}
         ldrb    r12, [r1]
         cmp     r12, #0x72  ; 'r', will include "rom:" and "rom2:"
-        cmpne   r12, #0x64  ; 'd', will include "data:"
-        bne     endRedir
+		bne 	endRedir
         sub     sp, sp, #0x400
-
         pathRedir:
             stmfd   sp!, {r0-r3}
             add     r0, sp, #0x10
@@ -79,13 +77,7 @@ _start:
                 cmp     r2, #0
                 bne     pathRedir_3
             ldmfd   sp!, {r0-r3}
-
         mov     r1, sp
-        cmp     r12, #0x64
-        load    r4, saveFolderName
-        streq   r4, [r1, #0x42]
-        load    r4, saveFolderName+4
-        streq   r4, [r1, #0x46]
         bl      _fsRedir+4
         add     sp, sp, #0x400
         cmp     r0, #0
@@ -98,12 +90,9 @@ _start:
 
 .pool
 .align 4
-    sdmcArchiveName :       .dcb "YS:", 0
-    saveFolderName  :       .dcw "save" ; overwriting this on 'romfs' will give 'saves'
-    dummyWord :             .word 0xdeadbeef
-    sdmcCustomPath :        .word 0x00000000
-    fsMountArchive :        .word 0x00000000
-    fsRegisterArchive :     .word 0x00000000
-    iFileOpen :             .word 0x00000000
+    sdmcArchiveName :       .dcb "sdmc:", 0 .align 4
+    sdmcCustomPath :        .word 0xdead0004
+    fsMountArchive :        .word 0xdead0005
+    fsRegisterArchive :     .word 0xdead0006
 
 .close

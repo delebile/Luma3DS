@@ -89,17 +89,11 @@ static u32 findIFileOpen(u8* code, u32 size)
 	u32 func = 0;
 	for(u32 i = 0; i < size && !func; i += 4)
 	{
-		if((*((u32*)(code + i + 0x0)) == 0xe1a06000 && 
-			*((u32*)(code + i + 0x4)) == 0xe24dd010 && 
-			*((u32*)(code + i + 0x8)) == 0xe1a07002 && 
-			*((u32*)(code + i + 0xc)) == 0xe1a08001) ||
-		   (*((u32*)(code + i + 0x0)) == 0xe1a05000 && 
-			*((u32*)(code + i + 0x4)) == 0xe24dd010 && 
-			*((u32*)(code + i + 0x8)) == 0xe1a04001 && 
-			*((u32*)(code + i + 0xc)) == 0xe1a00001))
-		{
+		if(!memcmp((void*)(code + i), (void*)(u8[]){0x00, 0x60, 0xA0, 0xE1, 0x14, 0xD0, 0x4D, 0xE2, 0x01, 0x40, 0xA0, 0xE1, 0x02, 0x70, 0xA0, 0xE1}, 16) ||
+		   !memcmp((void*)(code + i), (void*)(u8[]){0x00, 0x60, 0xA0, 0xE1, 0x10, 0xD0, 0x4D, 0xE2, 0x02, 0x70, 0xA0, 0xE1, 0x01, 0x80, 0xA0, 0xE1}, 16) ||
+		   !memcmp((void*)(code + i), (void*)(u8[]){0x00, 0x50, 0xA0, 0xE1, 0x10, 0xD0, 0x4D, 0xE2, 0x01, 0x40, 0xA0, 0xE1, 0x01, 0x00, 0xA0, 0xE1}, 16)) 
 			func = findNearestStmfd(code, i);
-		}
+		
 	}
 	return func;
 }
@@ -110,6 +104,7 @@ static u32 findFsMountRom(u8* code, u32 size)
 	for(u32 i = 0; i < size && !func; i += 4)
 	{	
 		if(!memcmp((void*)(code + i), (void*)(u8[]){0x0C, 0x00, 0x9D, 0xE5, 0x00, 0x10, 0x90, 0xE5, 0x28, 0x10, 0x91, 0xE5, 0x31, 0xFF, 0x2F, 0xE1}, 16) ||
+		   !memcmp((void*)(code + i), (void*)(u8[]){0x08, 0x00, 0x9D, 0xE5, 0x00, 0x10, 0x90, 0xE5, 0x30, 0x10, 0x91, 0xE5, 0x31, 0xFF, 0x2F, 0xE1}, 16) ||
 		   !memcmp((void*)(code + i), (void*)(u8[]){0x31, 0xFF, 0x2F, 0xE1, 0x04, 0x00, 0xA0, 0xE1, 0x0F, 0x10, 0xA0, 0xE1, 0xA4, 0x2F, 0xB0, 0xE1}, 16))
 			func = findNearestStmfd(code, i);
 	}
@@ -118,8 +113,16 @@ static u32 findFsMountRom(u8* code, u32 size)
 
 static u32 findFsMountArchive(u8* code, u32 size)
 {
-	u32 fsMountSave = findFunctionCommand(code, size, 0xC92044E7);
 	u32 func = 0;
+	u32 fsMountSave = findFunctionCommand(code, size, 0xC92044E7);
+	if(!fsMountSave)
+	{
+		for(u32 i = 0; i < size && !func; i += 4)
+		{	
+			if(!memcmp((void*)(code + i), (void*)(u8[]){0x00, 0x00, 0x9D, 0xE5, 0x00, 0x10, 0x90, 0xE5, 0x28, 0x10, 0x91, 0xE5, 0x31, 0xFF, 0x2F, 0xE1}, 16))
+				func = findNearestStmfd(code, i);
+		}
+	}
 
 	/* fsMountArchive is the first function call in fsMountSave */
 	for(u32 i = fsMountSave; i < fsMountSave + 0x100 && !func; i += 4)
@@ -145,27 +148,35 @@ void patchLayeredFs(u64 progId, u8* code, u32 size)
 	u32 fsMountArchive = findFsMountArchive(code, size);
 
 	/* Inject the payload just if we have enough symbols */
-	if(fsMountRom && fsMountArchive && fsRegisterArchive && binSpace && strSpace)
+	if(iFileOpen && fsMountRom && fsMountArchive && fsRegisterArchive && binSpace && strSpace)
 	{ 
+		/* Check if sdcard is already mounted by the app */
+		u32 sdIsMounted = 0;
+		if(memsearch(code, (const void*)"sdmc:", size, 6)) sdIsMounted = 1;
+
 		/* Copy payload and string in the free space */
 		memcpy((void*)(code + binSpace), (void*)fsredir_bin, fsredir_bin_size);
-		memcpy((void*)(code + strSpace), (void*)"YS:/luma/titles/0000000000000000/romfs", 39);
-		progIdToStr((char*)(code + strSpace + 31), progId);
+		memcpy((void*)(code + strSpace), (void*)"sdmc:/luma/titles/0000000000000000/romfs", 41);
+		progIdToStr((char*)(code + strSpace + 33), progId);
 
 		/* Insert symbols in the payload */
-		u32* symbols = (u32*)(code + binSpace + fsredir_bin_size);
-		while(*(symbols - 1) != 0xdeadbeef) symbols--;
-		*symbols++ = 0x100000 + strSpace;
-		*symbols++ = 0x100000 + fsMountArchive;
-		*symbols++ = 0x100000 + fsRegisterArchive;
-		*symbols++ = 0x100000 + iFileOpen;
+		u32* code32 = (u32*)(code + binSpace);
+		for(u32 i = 0; i < fsredir_bin_size/4; i++)
+		{
+			if(code32[i] == 0xdead0000) code32[i] = *((u32*)(code + fsMountRom));
+			if(code32[i] == 0xdead0001) code32[i] = BRANCH(binSpace + i*4, fsMountRom + 4);
+			if(code32[i] == 0xdead0002) code32[i] = *((u32*)(code + iFileOpen));
+			if(code32[i] == 0xdead0003) code32[i] = BRANCH(binSpace + i*4, iFileOpen + 4);
+			if(code32[i] == 0xdead0004) code32[i] = 0x100000 + strSpace;
+			if(code32[i] == 0xdead0005) code32[i] = 0x100000 + fsMountArchive;
+			if(code32[i] == 0xdead0006) code32[i] = 0x100000 + fsRegisterArchive;
+		}
 
 		/* Place hooks in order to redirect code-flow */
-		*((u32*)(code + binSpace + 4))  = *((u32*)(code + fsMountRom));
-		*((u32*)(code + binSpace + 8))  = BRANCH(binSpace + 8, fsMountRom + 4);
-		*((u32*)(code + fsMountRom))    = BRANCH(fsMountRom, binSpace);
-		*((u32*)(code + binSpace + 16)) = *((u32*)(code + iFileOpen));
-		*((u32*)(code + binSpace + 20)) = BRANCH(binSpace + 20, iFileOpen + 4);
-		*((u32*)(code + iFileOpen))     = BRANCH(iFileOpen, binSpace + 12);
+		if(!sdIsMounted)
+		{
+			*((u32*)(code + fsMountRom)) = BRANCH(fsMountRom, binSpace);
+		}
+		*((u32*)(code + iFileOpen))  = BRANCH(iFileOpen, binSpace + 12);
 	}
 }
